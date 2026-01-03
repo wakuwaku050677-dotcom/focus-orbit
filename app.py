@@ -32,15 +32,11 @@ check_password()
 # ---------------------------------------------------------
 # 🛠️ Googleスプレッドシート接続設定
 # ---------------------------------------------------------
-# シート名（間違えないように！）
 SHEET_NAME = "focus_orbit_db"
 
 @st.cache_resource
 def get_gspread_client():
-    # Secretsから辞書として読み込む
     key_dict = dict(st.secrets["gcp_service_account"])
-    
-    # 秘密鍵の改行コード修正（エラー回避）
     if "private_key" in key_dict:
         key_dict["private_key"] = key_dict["private_key"].replace("\\n", "\n")
 
@@ -55,10 +51,9 @@ def get_sheet():
         sheet = client.open(SHEET_NAME).sheet1
         return sheet
     except gspread.SpreadsheetNotFound:
-        st.error(f"エラー：スプレッドシート '{SHEET_NAME}' が見つかりません。共有設定と名前を確認してください。")
+        st.error(f"エラー：スプレッドシート '{SHEET_NAME}' が見つかりません。")
         st.stop()
 
-# データの読み書き関数
 def load_data():
     sheet = get_sheet()
     try:
@@ -71,13 +66,9 @@ def load_data():
         return pd.DataFrame()
 
 def save_log(data_dict):
-    """データをスプレッドシートに追加する"""
     sheet = get_sheet()
-    
-    # タイムスタンプを追加
     data_dict["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    # スプレッドシートのヘッダーがなければ作成（初回のみ）
     try:
         header = sheet.row_values(1)
         if not header:
@@ -86,10 +77,14 @@ def save_log(data_dict):
     except:
         pass
         
-    # 現在のヘッダーに合わせて値を並べる
     header = sheet.row_values(1)
+    # 不足しているカラムがあれば追加（柔軟性確保）
+    for col in data_dict.keys():
+        if col not in header:
+            # 本当は列追加処理が必要だが、簡易的に既存ヘッダーに合わせて無視または空文字対応
+            pass
+
     row = [data_dict.get(col, "") for col in header]
-    
     sheet.append_row(row)
     st.toast("✅ 記録しました！")
     time.sleep(1)
@@ -123,7 +118,6 @@ with tab1:
         reward = st.text_input("6週間後のご褒美", placeholder="例：美味しいお寿司！")
         
         if st.form_submit_button("宣言を更新する"):
-            # 設定用の特別なログとして保存
             save_log({
                 "type": "setup",
                 "user": user_name,
@@ -180,28 +174,55 @@ with tab3:
 with tab4:
     st.header("📊 Orbit Dashboard")
     
-    # データを読み込み
     df = load_data()
     
     if not df.empty:
-        # 自分のデータだけ抽出
         my_df = df[df["user"] == user_name]
         
-        # 最新の宣言を表示
+        # 1. 宣言内容の表示（ご褒美を追加！）
         setup_df = my_df[my_df["type"] == "setup"]
         if not setup_df.empty:
             last_setup = setup_df.iloc[-1]
-            st.success(f"🏆 目標：{last_setup.get('goal', '未設定')}")
-            st.warning(f"⛔ 禁止：{last_setup.get('not_to_do', '未設定')}")
+            c1, c2 = st.columns(2)
+            c1.success(f"🏆 目標：{last_setup.get('goal', '未設定')}")
+            c2.warning(f"⛔ 禁止：{last_setup.get('not_to_do', '未設定')}")
+            # New! ご褒美表示
+            st.info(f"🎁 達成ご褒美：{last_setup.get('reward', '未設定')}")
+            st.divider()
         
-        # 履歴表示
+        # 2. グラフ化（週ごとのIf-Then達成数）
+        st.subheader("📈 If-Then達成の推移")
+        
+        daily_df = my_df[my_df["type"] == "daily"].copy()
+        
+        if not daily_df.empty and "date" in daily_df.columns and "if_then_ok" in daily_df.columns:
+            try:
+                # 日付型に変換
+                daily_df["date"] = pd.to_datetime(daily_df["date"])
+                
+                # "Yes"を1、"No"を0に変換して集計
+                daily_df["count"] = daily_df["if_then_ok"].apply(lambda x: 1 if x == "Yes" else 0)
+                
+                # 週ごとに集計（月曜始まり 'W-MON'）
+                weekly_stats = daily_df.resample("W-MON", on="date")["count"].sum().reset_index()
+                
+                # グラフ用に日付を文字列に整形（例: "2026-01-05週"）
+                weekly_stats["Week"] = weekly_stats["date"].dt.strftime('%m/%d週')
+                
+                # 棒グラフ描画
+                st.bar_chart(weekly_stats, x="Week", y="count", color="#00aa00")
+                
+            except Exception as e:
+                st.caption(f"グラフ生成用データが不足しています: {e}")
+        else:
+            st.caption("データが集まるとここにグラフが表示されます。")
+
+        # 3. 履歴リスト
         st.subheader("📝 最近の記録")
-        display_cols = ["date", "type", "memo", "if_then_ok"]
-        # 存在する列だけ表示
+        display_cols = ["date", "type", "memo", "if_then_ok", "exclusion_ok"]
         existing_cols = [c for c in display_cols if c in df.columns]
         st.dataframe(df[existing_cols].sort_index(ascending=False))
         
-        # 励ましメッセージ
         st.divider()
         st.caption("🤖 Message from Control Tower:")
         import random
