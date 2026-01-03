@@ -31,7 +31,7 @@ check_password()
 # ---------------------------------------------------------
 
 # 👇👇👇 ここにコピーしたIDを貼ってください！ 👇👇👇
-SHEET_ID = "voruG0wDD6TqhiXo1OE8RNNBM9N2zomPR0hWAV2apM"
+SHEET_ID = "1_voruG0wDD6TqhiXo1OE8RNNBM9N2zomPR0hWAV2apM"
 # 👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆
 
 @st.cache_resource
