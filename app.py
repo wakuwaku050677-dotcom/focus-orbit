@@ -6,13 +6,18 @@ from datetime import datetime, timedelta
 import time
 
 # ---------------------------------------------------------
-# 🔒 セキュリティ設定
+# 🔑 スプレッドシートID（ここで場所を確定！）
 # ---------------------------------------------------------
+SHEET_ID = "1_voruG0wDD6TqhiXo1OE8RNNBM9N2zomPR0hWAV2apM"
+# ---------------------------------------------------------
+
 SIMPLE_PASSWORD = "focus2026"
 
 def check_password():
+    """パスワード認証機能"""
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
+
     if not st.session_state.authenticated:
         st.title("🔒 Login Required")
         password = st.text_input("パスワードを入力", type="password")
@@ -24,18 +29,19 @@ def check_password():
                 st.error("パスワードが違います")
         st.stop()
 
+# 認証チェック実行
 check_password()
 
 # ---------------------------------------------------------
-# 🛠️ Googleスプレッドシート接続設定（ID指名版）
+# 🛠️ Googleスプレッドシート接続設定
 # ---------------------------------------------------------
-
-# 👇👇👇 ここにコピーしたIDを貼ってください！ 👇👇👇
-SHEET_ID = "1_voruG0wDD6TqhiXo1OE8RNNBM9N2zomPR0hWAV2apM"
-# 👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆
-
 @st.cache_resource
 def get_gspread_client():
+    # Secretsから読み込み
+    if "gcp_service_account" not in st.secrets:
+        st.error("Secrets設定が見つかりません。")
+        st.stop()
+        
     key_dict = dict(st.secrets["gcp_service_account"])
     if "private_key" in key_dict:
         key_dict["private_key"] = key_dict["private_key"].replace("\\n", "\n")
@@ -48,11 +54,11 @@ def get_gspread_client():
 def get_sheet():
     client = get_gspread_client()
     try:
-        # ここを open_by_key に変更しました
+        # IDを使って確実に開く
         sheet = client.open_by_key(SHEET_ID).sheet1
         return sheet
     except Exception as e:
-        st.error(f"エラー：スプレッドシートが開けません。IDと共有設定を確認してください。\n詳細: {e}")
+        st.error(f"❌ シートが開けません。共有設定を確認してください。\nID: {SHEET_ID}\nエラー: {e}")
         st.stop()
 
 def load_data():
@@ -60,10 +66,9 @@ def load_data():
     try:
         data = sheet.get_all_records()
         df = pd.DataFrame(data)
-        if df.empty:
-             return pd.DataFrame()
+        if df.empty: return pd.DataFrame()
         return df
-    except Exception:
+    except:
         return pd.DataFrame()
 
 def save_log(data_dict):
@@ -108,13 +113,13 @@ tab1, tab2, tab3, tab4 = st.tabs(["🎯 宣言", "✅ 日次", "🔄 週次", "�
 with tab1:
     st.header("🎯 Project Setup")
     
-    # 接続確認リンク
+    # 接続確認リンク（安心のため表示）
     try:
         sheet = get_sheet()
-        st.success(f"🔗 接続中のシートを確認 👉 [クリック]({sheet.url})")
+        st.success(f"🔗 接続中のシートを確認 👉 [クリックして開く]({sheet.url})")
     except:
         pass
-
+    
     st.info("この6週間、何に命を燃やす？")
     
     with st.form("setup_form"):
@@ -232,14 +237,3 @@ with tab4:
 
         # 3. 履歴リスト
         st.subheader("📝 最近の記録")
-        cols = ["date", "type", "memo", "if_then_ok"]
-        show_cols = [c for c in cols if c in df.columns]
-        st.dataframe(df[show_cols].sort_index(ascending=False))
-        
-        st.divider()
-        import random
-        msgs = ["飽きは変化の兆しだ。", "ナメるな、俺の工夫。", "0から1より、1を育てろ。", "感情は羅針盤だ。", "書くことは、考えることだ。"]
-        st.write(f"**「{random.choice(msgs)}」**")
-
-    else:
-        st.info("データがありません。「宣言」タブから入力を！")
