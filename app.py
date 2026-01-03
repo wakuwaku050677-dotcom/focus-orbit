@@ -81,7 +81,6 @@ def save_log(data_dict):
     # 不足しているカラムがあれば追加（柔軟性確保）
     for col in data_dict.keys():
         if col not in header:
-            # 本当は列追加処理が必要だが、簡易的に既存ヘッダーに合わせて無視または空文字対応
             pass
 
     row = [data_dict.get(col, "") for col in header]
@@ -112,17 +111,37 @@ with tab1:
     
     with st.form("setup_form"):
         goal = st.text_input("たった一つの目標", placeholder="例：毎日インスタに4コマ漫画投稿")
-        period = st.text_input("期間", placeholder="例：2026/01/05 〜 2026/02/15")
+        
+        # 変更点：カレンダー入力に変更
+        # デフォルト期間（今日から6週間）
+        default_start = datetime.now().date()
+        default_end = default_start + timedelta(weeks=6)
+        
+        st.write("期間設定（開始日と終了日を選択）")
+        period_tuple = st.date_input(
+            "カレンダー",
+            value=(default_start, default_end),
+            help="カレンダーで開始日と終了日をクリックしてください"
+        )
+        
         not_to_do = st.text_area("除外リスト（やらないこと）", placeholder="例：YouTubeを見ない、ダラダラSNSしない")
         if_then = st.text_area("If-Thenルール", placeholder="例：朝起きたら → すぐにPCを開く")
         reward = st.text_input("6週間後のご褒美", placeholder="例：美味しいお寿司！")
         
         if st.form_submit_button("宣言を更新する"):
+            # 期間を文字列に変換
+            if isinstance(period_tuple, tuple) and len(period_tuple) == 2:
+                period_str = f"{period_tuple[0]} 〜 {period_tuple[1]}"
+            elif isinstance(period_tuple, tuple) and len(period_tuple) == 1:
+                period_str = f"{period_tuple[0]} 〜 (未定)"
+            else:
+                period_str = str(period_tuple)
+
             save_log({
                 "type": "setup",
                 "user": user_name,
                 "goal": goal,
-                "period": period,
+                "period": period_str,
                 "not_to_do": not_to_do,
                 "if_then": if_then,
                 "reward": reward
@@ -155,84 +174,4 @@ with tab3:
     st.write("1週間を振り返り、軌道を修正する")
     
     with st.form("weekly_form"):
-        w_date = st.date_input("振り返り日", datetime.now())
-        q1 = st.text_area("1. 事実と感情（何をした？どう感じた？）")
-        q2 = st.text_area("2. 目標進捗（理想に近づいている？）")
-        q3 = st.text_area("3. 環境評価（ツールや場所は適切？）")
-        q4 = st.text_area("4. リソース活用（AIや体験を活かせた？）")
-        q5 = st.text_area("5. 次週の仮説（来週の実験と対策は？）")
-        
-        if st.form_submit_button("週次レビューを保存"):
-            save_log({
-                "type": "weekly",
-                "user": user_name,
-                "date": str(w_date),
-                "q1": q1, "q2": q2, "q3": q3, "q4": q4, "q5": q5
-            })
-
-# --- Tab 4: ダッシュボード ---
-with tab4:
-    st.header("📊 Orbit Dashboard")
-    
-    df = load_data()
-    
-    if not df.empty:
-        my_df = df[df["user"] == user_name]
-        
-        # 1. 宣言内容の表示（ご褒美を追加！）
-        setup_df = my_df[my_df["type"] == "setup"]
-        if not setup_df.empty:
-            last_setup = setup_df.iloc[-1]
-            c1, c2 = st.columns(2)
-            c1.success(f"🏆 目標：{last_setup.get('goal', '未設定')}")
-            c2.warning(f"⛔ 禁止：{last_setup.get('not_to_do', '未設定')}")
-            # New! ご褒美表示
-            st.info(f"🎁 達成ご褒美：{last_setup.get('reward', '未設定')}")
-            st.divider()
-        
-        # 2. グラフ化（週ごとのIf-Then達成数）
-        st.subheader("📈 If-Then達成の推移")
-        
-        daily_df = my_df[my_df["type"] == "daily"].copy()
-        
-        if not daily_df.empty and "date" in daily_df.columns and "if_then_ok" in daily_df.columns:
-            try:
-                # 日付型に変換
-                daily_df["date"] = pd.to_datetime(daily_df["date"])
-                
-                # "Yes"を1、"No"を0に変換して集計
-                daily_df["count"] = daily_df["if_then_ok"].apply(lambda x: 1 if x == "Yes" else 0)
-                
-                # 週ごとに集計（月曜始まり 'W-MON'）
-                weekly_stats = daily_df.resample("W-MON", on="date")["count"].sum().reset_index()
-                
-                # グラフ用に日付を文字列に整形（例: "2026-01-05週"）
-                weekly_stats["Week"] = weekly_stats["date"].dt.strftime('%m/%d週')
-                
-                # 棒グラフ描画
-                st.bar_chart(weekly_stats, x="Week", y="count", color="#00aa00")
-                
-            except Exception as e:
-                st.caption(f"グラフ生成用データが不足しています: {e}")
-        else:
-            st.caption("データが集まるとここにグラフが表示されます。")
-
-        # 3. 履歴リスト
-        st.subheader("📝 最近の記録")
-        display_cols = ["date", "type", "memo", "if_then_ok", "exclusion_ok"]
-        existing_cols = [c for c in display_cols if c in df.columns]
-        st.dataframe(df[existing_cols].sort_index(ascending=False))
-        
-        st.divider()
-        st.caption("🤖 Message from Control Tower:")
-        import random
-        msgs = [
-            "飽きは変化の兆しだ。恐れるな。",
-            "ナメるな、俺の工夫。",
-            "0から1より、1を育てろ。",
-            "感情は羅針盤だ。無視するな。",
-            "書くことは、考えることだ。"
-        ]
-        st.write(f"**「{random.choice(msgs)}」**")
-    else:
-        st.info("まだデータがありません。「宣言・設計」タブから入力を始めましょう！")
+        w_date = st.date_input("振り返り日",
