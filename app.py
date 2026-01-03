@@ -6,15 +6,13 @@ from datetime import datetime, timedelta
 import time
 
 # ---------------------------------------------------------
-# 🔒 セキュリティ設定（簡易パスワード）
+# 🔒 セキュリティ設定
 # ---------------------------------------------------------
 SIMPLE_PASSWORD = "focus2026"
 
 def check_password():
-    """パスワード認証機能"""
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
-
     if not st.session_state.authenticated:
         st.title("🔒 Login Required")
         password = st.text_input("パスワードを入力", type="password")
@@ -26,19 +24,20 @@ def check_password():
                 st.error("パスワードが違います")
         st.stop()
 
-# 認証チェック実行
 check_password()
 
 # ---------------------------------------------------------
-# 🛠️ Googleスプレッドシート接続設定
+# 🛠️ Googleスプレッドシート接続設定（ID指名版）
 # ---------------------------------------------------------
-1_# 名前ではなく、コピーしたIDを貼り付けてください！
+
+# 👇👇👇 ここにコピーしたIDを貼ってください！ 👇👇👇
 SHEET_ID = "voruG0wDD6TqhiXo1OE8RNNBM9N2zomPR0hWAV2apM"
+# 👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆👆
+
 @st.cache_resource
 def get_gspread_client():
     key_dict = dict(st.secrets["gcp_service_account"])
     if "private_key" in key_dict:
-        # 改行コードの修正
         key_dict["private_key"] = key_dict["private_key"].replace("\\n", "\n")
 
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
@@ -49,10 +48,11 @@ def get_gspread_client():
 def get_sheet():
     client = get_gspread_client()
     try:
-        sheet = client.open(SHEET_NAME).sheet1
+        # ここを open_by_key に変更しました
+        sheet = client.open_by_key(SHEET_ID).sheet1
         return sheet
-    except gspread.SpreadsheetNotFound:
-        st.error(f"エラー：シート '{SHEET_NAME}' が見つかりません。")
+    except Exception as e:
+        st.error(f"エラー：スプレッドシートが開けません。IDと共有設定を確認してください。\n詳細: {e}")
         st.stop()
 
 def load_data():
@@ -108,20 +108,18 @@ tab1, tab2, tab3, tab4 = st.tabs(["🎯 宣言", "✅ 日次", "🔄 週次", "�
 with tab1:
     st.header("🎯 Project Setup")
     
-    # ▼▼▼ 🕵️‍♀️ 追記：本当の保存先を表示するコード ▼▼▼
+    # 接続確認リンク
     try:
-        current_sheet = get_sheet()
-        st.success(f"🔗 アプリがつながっているシートはここです！ 👉 [クリックして開く]({current_sheet.url})")
+        sheet = get_sheet()
+        st.success(f"🔗 接続中のシートを確認 👉 [クリック]({sheet.url})")
     except:
-        st.error("シートに接続できません")
-    # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
-    
+        pass
+
     st.info("この6週間、何に命を燃やす？")
     
     with st.form("setup_form"):
         goal = st.text_input("たった一つの目標", placeholder="例：毎日4コマ漫画投稿")
         
-        # 期間設定（カレンダー）
         d_start = datetime.now().date()
         d_end = d_start + timedelta(weeks=6)
         
@@ -133,7 +131,6 @@ with tab1:
         reward = st.text_input("6週間後のご褒美", placeholder="例：お寿司")
         
         if st.form_submit_button("宣言を更新"):
-            # 期間を文字列化
             p_str = str(period_tuple)
             if isinstance(period_tuple, tuple) and len(period_tuple) == 2:
                 p_str = f"{period_tuple[0]} 〜 {period_tuple[1]}"
@@ -198,12 +195,10 @@ with tab4:
     if not df.empty:
         my_df = df[df["user"] == user_name]
         
-        # 1. 宣言内容（行を分けてエラー回避）
+        # 1. 宣言内容
         setup_df = my_df[my_df["type"] == "setup"]
         if not setup_df.empty:
             last = setup_df.iloc[-1]
-            
-            # 安全に値を取得
             g_text = last.get('goal', '未設定')
             n_text = last.get('not_to_do', '未設定')
             r_text = last.get('reward', '未設定')
@@ -220,45 +215,30 @@ with tab4:
         st.subheader("📈 日々の達成記録")
         daily_df = my_df[my_df["type"] == "daily"].copy()
         
-        # 必要な列があるか確認
         has_date = "date" in daily_df.columns
         has_ok = "if_then_ok" in daily_df.columns
 
         if not daily_df.empty and has_date and has_ok:
             try:
-                # 日付変換
                 daily_df["date"] = pd.to_datetime(daily_df["date"])
                 daily_df = daily_df.sort_values("date")
-                
-                # 数値化
-                daily_df["達成"] = daily_df["if_then_ok"].apply(
-                    lambda x: 1 if x == "Yes" else 0
-                )
+                daily_df["達成"] = daily_df["if_then_ok"].apply(lambda x: 1 if x == "Yes" else 0)
                 daily_df["日付"] = daily_df["date"].dt.strftime('%m/%d')
-                
                 st.bar_chart(daily_df, x="日付", y="達成", color="#00aa00")
             except:
-                st.caption("グラフ作成エラー：データ形式を確認中")
+                st.caption("データ収集中...")
         else:
             st.caption("データが集まるとここにグラフが表示されます。")
 
         # 3. 履歴リスト
         st.subheader("📝 最近の記録")
         cols = ["date", "type", "memo", "if_then_ok"]
-        # 安全に列を選択
         show_cols = [c for c in cols if c in df.columns]
         st.dataframe(df[show_cols].sort_index(ascending=False))
         
         st.divider()
-        # メッセージ機能
         import random
-        msgs = [
-            "飽きは変化の兆しだ。",
-            "ナメるな、俺の工夫。",
-            "0から1より、1を育てろ。",
-            "感情は羅針盤だ。",
-            "書くことは、考えることだ。"
-        ]
+        msgs = ["飽きは変化の兆しだ。", "ナメるな、俺の工夫。", "0から1より、1を育てろ。", "感情は羅針盤だ。", "書くことは、考えることだ。"]
         st.write(f"**「{random.choice(msgs)}」**")
 
     else:
