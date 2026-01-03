@@ -32,8 +32,8 @@ check_password()
 # ---------------------------------------------------------
 # 🛠️ Googleスプレッドシート接続設定
 # ---------------------------------------------------------
-SHEET_NAME = "focus_orbit_db"
-
+1_# 名前ではなく、コピーしたIDを貼り付けてください！
+SHEET_ID = "voruG0wDD6TqhiXo1OE8RNNBM9N2zomPR0hWAV2apM"
 @st.cache_resource
 def get_gspread_client():
     key_dict = dict(st.secrets["gcp_service_account"])
