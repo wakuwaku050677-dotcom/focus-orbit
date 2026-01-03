@@ -112,8 +112,7 @@ with tab1:
     with st.form("setup_form"):
         goal = st.text_input("たった一つの目標", placeholder="例：毎日インスタに4コマ漫画投稿")
         
-        # 変更点：カレンダー入力に変更
-        # デフォルト期間（今日から6週間）
+        # 期間設定（カレンダー）
         default_start = datetime.now().date()
         default_end = default_start + timedelta(weeks=6)
         
@@ -174,4 +173,34 @@ with tab3:
     st.write("1週間を振り返り、軌道を修正する")
     
     with st.form("weekly_form"):
-        w_date = st.date_input("振り返り日",
+        w_date = st.date_input("振り返り日", datetime.now())
+        q1 = st.text_area("1. 事実と感情（何をした？どう感じた？）")
+        q2 = st.text_area("2. 目標進捗（理想に近づいている？）")
+        q3 = st.text_area("3. 環境評価（ツールや場所は適切？）")
+        q4 = st.text_area("4. リソース活用（AIや体験を活かせた？）")
+        q5 = st.text_area("5. 次週の仮説（来週の実験と対策は？）")
+        
+        if st.form_submit_button("週次レビューを保存"):
+            save_log({
+                "type": "weekly",
+                "user": user_name,
+                "date": str(w_date),
+                "q1": q1, "q2": q2, "q3": q3, "q4": q4, "q5": q5
+            })
+
+# --- Tab 4: ダッシュボード ---
+with tab4:
+    st.header("📊 Orbit Dashboard")
+    
+    df = load_data()
+    
+    if not df.empty:
+        my_df = df[df["user"] == user_name]
+        
+        # 1. 宣言内容
+        setup_df = my_df[my_df["type"] == "setup"]
+        if not setup_df.empty:
+            last_setup = setup_df.iloc[-1]
+            c1, c2 = st.columns(2)
+            c1.success(f"🏆 目標：{last_setup.get('goal', '未設定')}")
+            c2.warning(f"⛔ 禁止：{last_setup.get('not_to_do
